@@ -1,0 +1,13 @@
+{
+  "name": "statcan-athena-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Athena AI Agent for Statistics Canada data",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.25.76"
+  }
+}

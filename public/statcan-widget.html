@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Statistics Canada Data</title>
+    <style>
+      :root {
+        color: #0b0b0f;
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+      }
+
+      html, body {
+        width: 100%;
+        min-height: 100%;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: #f6f8fb;
+        padding: 16px;
+      }
+
+      main {
+        width: 100%;
+        max-width: 720px;
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 16px;
+        padding: 20px 24px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .header-icon {
+        width: 36px;
+        height: 36px;
+        background: #d62b1f;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .header-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: white;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #0b0b0f;
+      }
+
+      .subtitle {
+        margin: 0;
+        font-size: 0.8rem;
+        color: #6c768a;
+      }
+
+      .meta-row {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+
+      .meta-chip {
+        background: #f0f2f8;
+        border-radius: 20px;
+        padding: 4px 12px;
+        font-size: 0.78rem;
+        color: #444a5e;
+        font-weight: 500;
+      }
+
+      .meta-chip span {
+        color: #0b0b0f;
+        font-weight: 700;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border-radius: 10px;
+        border: 1px solid #e2e7f0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+      }
+
+      thead {
+        background: #f4f6fb;
+      }
+
+      thead th {
+        text-align: left;
+        padding: 10px 14px;
+        font-weight: 600;
+        color: #444a5e;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+        border-bottom: 1px solid #e2e7f0;
+      }
+
+      tbody tr {
+        border-bottom: 1px solid #f0f2f8;
+        transition: background 0.1s;
+      }
+
+      tbody tr:hover {
+        background: #f8f9fc;
+      }
+
+      tbody tr:last-child {
+        border-bottom: none;
+      }
+
+      tbody td {
+        padding: 10px 14px;
+        color: #1a1f2e;
+      }
+
+      .num {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 0.74rem;
+        font-weight: 600;
+      }
+
+      .badge-pos {
+        background: #e6f4ea;
+        color: #1a7a3c;
+      }
+
+      .badge-neg {
+        background: #fce8e8;
+        color: #c62828;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #6c768a;
+        font-size: 0.9rem;
+      }
+
+      .loading-spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid #e2e7f0;
+        border-top-color: #d62b1f;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 12px;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .source-note {
+        margin-top: 12px;
+        font-size: 0.74rem;
+        color: #9aa0b3;
+        text-align: right;
+      }
+
+      .source-note a {
+        color: #9aa0b3;
+        text-decoration: underline;
+      }
+
+      .error {
+        background: #fce8e8;
+        color: #c62828;
+        border-radius: 10px;
+        padding: 16px;
+        font-size: 0.88rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <div class="loading">
+        <div class="loading-spinner"></div>
+        Loading Statistics Canada data...
+      </div>
+    </main>
+
+    <script type="module">
+      // Read data from window.openai.toolOutput (injected by Athena)
+      const getData = () => {
+        return window.openai?.toolOutput ?? null;
+      };
+
+      function formatNumber(n) {
+        if (n === null || n === undefined || n === "") return "N/A";
+        const num = Number(n);
+        if (isNaN(num)) return n;
+        if (Math.abs(num) >= 1_000_000) return (num / 1_000_000).toFixed(2) + "M";
+        if (Math.abs(num) >= 1_000) return num.toLocaleString("en-CA");
+        return num.toFixed(2);
+      }
+
+      function renderTable(data) {
+        if (!data || !data.rows || data.rows.length === 0) {
+          return `<div class="error">No data available. Try asking for a specific Statistics Canada dataset.</div>`;
+        }
+
+        const { title, source, columns, rows, notes } = data;
+
+        const headerCells = columns.map(col =>
+          `<th class="${col.numeric ? 'num' : ''}">${col.label}</th>`
+        ).join("");
+
+        const bodyRows = rows.map(row => {
+          const cells = columns.map(col => {
+            const val = row[col.key];
+            if (col.numeric) {
+              return `<td class="num">${formatNumber(val)}</td>`;
+            }
+            if (col.change && val !== null && val !== undefined) {
+              const n = Number(val);
+              if (!isNaN(n)) {
+                const cls = n >= 0 ? "badge-pos" : "badge-neg";
+                const sign = n >= 0 ? "+" : "";
+                return `<td><span class="badge ${cls}">${sign}${val}%</span></td>`;
+              }
+            }
+            return `<td>${val ?? "N/A"}</td>`;
+          }).join("");
+          return `<tr>${cells}</tr>`;
+        }).join("");
+
+        const rowCount = rows.length;
+        const year = notes?.reference_period ?? "";
+
+        return `
+          <div class="header">
+            <div class="header-icon">
+              <svg viewBox="0 0 24 24"><path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 10h2v2H7v-2zm4-4h2v6h-2V11zm4-4h2v10h-2V7z"/></svg>
+            </div>
+            <div>
+              <h2>${title ?? "Statistics Canada Data"}</h2>
+              <p class="subtitle">${source ?? "Statistics Canada"}</p>
+            </div>
+          </div>
+
+          <div class="meta-row">
+            <div class="meta-chip">Records: <span>${rowCount}</span></div>
+            ${year ? `<div class="meta-chip">Reference period: <span>${year}</span></div>` : ""}
+            ${notes?.geography ? `<div class="meta-chip">Geography: <span>${notes.geography}</span></div>` : ""}
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr>${headerCells}</tr></thead>
+              <tbody>${bodyRows}</tbody>
+            </table>
+          </div>
+
+          <p class="source-note">
+            Source: <a href="https://www150.statcan.gc.ca" target="_blank" rel="noopener">Statistics Canada</a>
+            ${notes?.table_id ? ` &mdash; Table ${notes.table_id}` : ""}
+          </p>
+        `;
+      }
+
+      function render(data) {
+        const app = document.getElementById("app");
+        app.innerHTML = renderTable(data);
+      }
+
+      // Initial render
+      render(getData());
+
+      // Listen for Athena updates
+      window.addEventListener("openai:set_globals", (event) => {
+        const globals = event.detail?.globals;
+        if (globals?.toolOutput) {
+          render(globals.toolOutput);
+        }
+      }, { passive: true });
+    </script>
+  </body>
+</html>
