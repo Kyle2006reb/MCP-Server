@@ -1,9 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamable-http.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
-
 // ---------------------------------------------------------------------------
 // Widget HTML & URI
 // ---------------------------------------------------------------------------
