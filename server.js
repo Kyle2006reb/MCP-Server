@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
+
 // ---------------------------------------------------------------------------
 // Widget HTML & URI
 // ---------------------------------------------------------------------------
