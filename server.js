@@ -163,10 +163,10 @@ function createStatCanServer() {
   }));
 
   server.tool(
-    "browse_catalogue",
-    "Use this when the user wants to see what Statistics Canada datasets are available, or wants to explore topics like population, labour, prices, housing, GDP, trade, crime, or education.",
-    {},
-    async () => {
+  "browse_catalogue",
+  { description: "Use this when...", _meta: { "openai/outputTemplate": WIDGET_URI } },
+  {},
+  async () => {
       const rows = Object.entries(TABLE_CATALOGUE).map(([key, entry]) => ({
         topic: key, id: entry.id, title: entry.title, description: entry.description, theme: entry.topic,
       }));
@@ -190,7 +190,7 @@ function createStatCanServer() {
 
   server.tool(
     "get_statcan_data",
-    "Use this when the user asks for specific Canadian statistics or data. Retrieves and displays data tables from Statistics Canada for topics like population, labour force, CPI/inflation, housing starts, GDP, or trade.",
+    { description: "Use this when the user asks for specific Canadian statistics or data. Retrieves and displays data tables from Statistics Canada for topics like population, labour force, CPI/inflation, housing starts, GDP, or trade.", _meta: { "openai/outputTemplate": WIDGET_URI } },
     {
       topic: z.enum(["population", "labour", "cpi", "housing", "gdp", "trade", "crime", "education"]).describe("The statistical topic to retrieve"),
       max_rows: z.number().int().min(5).max(50).default(15).describe("Max rows to return"),
@@ -219,8 +219,7 @@ function createStatCanServer() {
 
   server.tool(
     "search_statcan",
-    "Use this when the user provides a specific Statistics Canada table ID (e.g. 17-10-0005-01) and wants to retrieve its data directly.",
-    {
+{ description: "Use this when the user provides a specific Statistics Canada table ID (e.g. 17-10-0005-01) and wants to retrieve its data directly.", _meta: { "openai/outputTemplate": WIDGET_URI } },    {
       table_id: z.string().describe("Statistics Canada table ID, e.g. 17-10-0005-01"),
       max_rows: z.number().int().min(5).max(50).default(20).describe("Max rows to return"),
     },
