@@ -1,28 +1,37 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamable-http.js";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 
+// ---------------------------------------------------------------------------
+// Widget HTML & URI
+// ---------------------------------------------------------------------------
 const WIDGET_HTML = readFileSync("public/statcan-widget.html", "utf8");
 const WIDGET_URI = "ui://widget/statcan-table.html";
 
+// ---------------------------------------------------------------------------
+// Table catalogue
+// ---------------------------------------------------------------------------
 const TABLE_CATALOGUE = {
   population: { id: "17-10-0005-01", title: "Population estimates, quarterly", description: "Canadian population by province/territory", topic: "Demographics" },
-  labour: { id: "14-10-0287-01", title: "Labour force characteristics by province", description: "Employment, unemployment rate, participation rate", topic: "Labour market" },
-  cpi: { id: "18-10-0004-01", title: "Consumer Price Index, monthly", description: "CPI by product group - food, shelter, energy", topic: "Prices" },
-  gdp: { id: "36-10-0434-01", title: "GDP by industry", description: "GDP at basic prices by industry group, monthly", topic: "National accounts" },
-  housing: { id: "34-10-0158-01", title: "Housing starts (CMHC)", description: "Housing starts by type of dwelling, monthly", topic: "Housing" },
-  trade: { id: "12-10-0011-01", title: "International merchandise trade", description: "Canadian exports and imports by commodity", topic: "International trade" },
-  crime: { id: "35-10-0177-01", title: "Crime severity index", description: "Crime severity index by province and CMA", topic: "Justice" },
-  education: { id: "37-10-0003-01", title: "Postsecondary enrolments", description: "University and college enrolments by province", topic: "Education" },
+  labour:     { id: "14-10-0287-01", title: "Labour force characteristics by province", description: "Employment, unemployment rate, participation rate", topic: "Labour market" },
+  cpi:        { id: "18-10-0004-01", title: "Consumer Price Index, monthly", description: "CPI by product group - food, shelter, energy", topic: "Prices" },
+  gdp:        { id: "36-10-0434-01", title: "GDP by industry", description: "GDP at basic prices by industry group, monthly", topic: "National accounts" },
+  housing:    { id: "34-10-0158-01", title: "Housing starts (CMHC)", description: "Housing starts by type of dwelling, monthly", topic: "Housing" },
+  trade:      { id: "12-10-0011-01", title: "International merchandise trade", description: "Canadian exports and imports by commodity", topic: "International trade" },
+  crime:      { id: "35-10-0177-01", title: "Crime severity index", description: "Crime severity index by province and CMA", topic: "Justice" },
+  education:  { id: "37-10-0003-01", title: "Postsecondary enrolments", description: "University and college enrolments by province", topic: "Education" },
 };
 
+// ---------------------------------------------------------------------------
+// StatCan data helpers
+// ---------------------------------------------------------------------------
 async function fetchWDSData(tableId, maxRows = 20) {
   const pid = tableId.replace(/-/g, "").slice(0, 8);
   const url = `https://www150.statcan.gc.ca/t1/tbl1/en/dtbl!downloadTbl/jsonDownload?pid=${pid}`;
   const resp = await fetch(url, {
-    headers: { "Accept": "*/*", "User-Agent": "StatCanAthenaAgent/1.0" },
+    headers: { Accept: "*/*", "User-Agent": "StatCanAthenaAgent/1.0" },
     signal: AbortSignal.timeout(20_000),
   });
   if (!resp.ok) throw new Error(`WDS API error ${resp.status}`);
@@ -34,23 +43,37 @@ async function fetchWDSData(tableId, maxRows = 20) {
 function parseStatCanResponse(rawData, tableId, maxRows) {
   if (!Array.isArray(rawData) || rawData.length === 0) return null;
   const allKeys = Object.keys(rawData[0]);
-  const skip = new Set(["DGUID","UOM","UOM_ID","SCALAR_FACTOR","SCALAR_ID","VECTOR","COORDINATE","STATUS","SYMBOL","TERMINATED","DECIMALS"]);
-  const displayKeys = allKeys.filter(k => !skip.has(k)).slice(0, 6);
-  const valueKeys = new Set(allKeys.filter(k => k === "VALUE" || k.toLowerCase().includes("value")));
-  const columns = displayKeys.map(k => ({
+  const skip = new Set([
+    "DGUID", "UOM", "UOM_ID", "SCALAR_FACTOR", "SCALAR_ID",
+    "VECTOR", "COORDINATE", "STATUS", "SYMBOL", "TERMINATED", "DECIMALS",
+  ]);
+  const displayKeys = allKeys.filter((k) => !skip.has(k)).slice(0, 6);
+  const valueKeys = new Set(allKeys.filter((k) => k === "VALUE" || k.toLowerCase().includes("value")));
+
+  const columns = displayKeys.map((k) => ({
     key: k,
-    label: k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()).replace("Ref Date","Reference Date").replace("Geo","Geography").replace("VALUE","Value"),
+    label: k
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .replace("Ref Date", "Reference Date")
+      .replace("Geo", "Geography")
+      .replace("VALUE", "Value"),
     numeric: valueKeys.has(k),
     change: false,
   }));
-  const rows = rawData.slice(0, maxRows).map(row => {
+
+  const rows = rawData.slice(0, maxRows).map((row) => {
     const out = {};
-    displayKeys.forEach(k => { out[k] = row[k]; });
+    displayKeys.forEach((k) => { out[k] = row[k]; });
     return out;
   });
+
   return { title: "Statistics Canada Data", source: "Statistics Canada", columns, rows, notes: { table_id: tableId } };
 }
 
+// ---------------------------------------------------------------------------
+// Sample / fallback data
+// ---------------------------------------------------------------------------
 function getSampleData(topic) {
   const samples = {
     population: {
@@ -150,25 +173,46 @@ function getSampleData(topic) {
   return samples[topic] || samples.population;
 }
 
+// ---------------------------------------------------------------------------
+// MCP Server factory
+// ---------------------------------------------------------------------------
 function createStatCanServer() {
   const server = new McpServer({ name: "statcan-agent", version: "1.0.0" });
 
-  server.resource("statcan-widget", WIDGET_URI, async () => ({
-    contents: [{
-      uri: WIDGET_URI,
-      mimeType: "text/html+skybridge",
-      text: WIDGET_HTML,
-      _meta: { "openai/widgetPrefersBorder": true },
-    }],
-  }));
+  // ---- Register the widget HTML as a resource ----
+  server.registerResource(
+    "statcan-widget",
+    WIDGET_URI,
+    {},
+    async () => ({
+      contents: [
+        {
+          uri: WIDGET_URI,
+          mimeType: "text/html+skybridge",
+          text: WIDGET_HTML,
+          _meta: { "openai/widgetPrefersBorder": true },
+        },
+      ],
+    })
+  );
 
-  server.tool(
-  "browse_catalogue",
-  { description: "Use this when...", _meta: { "openai/outputTemplate": WIDGET_URI } },
-  {},
-  async () => {
+  // ---- Tool: browse_catalogue ----
+  server.registerTool(
+    "browse_catalogue",
+    {
+      title: "Browse Statistics Canada Catalogue",
+      description:
+        "Use this when the user wants to see what Statistics Canada datasets are available, or asks what topics or tables can be queried.",
+      inputSchema: {},
+      _meta: { "openai/outputTemplate": WIDGET_URI },
+    },
+    async () => {
       const rows = Object.entries(TABLE_CATALOGUE).map(([key, entry]) => ({
-        topic: key, id: entry.id, title: entry.title, description: entry.description, theme: entry.topic,
+        topic: key,
+        id: entry.id,
+        title: entry.title,
+        description: entry.description,
+        theme: entry.topic,
       }));
       return {
         content: [{ type: "text", text: `Found ${rows.length} datasets in the Statistics Canada catalogue.` }],
@@ -188,16 +232,35 @@ function createStatCanServer() {
     }
   );
 
-  server.tool(
+  // ---- Tool: get_statcan_data ----
+  server.registerTool(
     "get_statcan_data",
-    { description: "Use this when the user asks for specific Canadian statistics or data. Retrieves and displays data tables from Statistics Canada for topics like population, labour force, CPI/inflation, housing starts, GDP, or trade.", _meta: { "openai/outputTemplate": WIDGET_URI } },
     {
-      topic: z.enum(["population", "labour", "cpi", "housing", "gdp", "trade", "crime", "education"]).describe("The statistical topic to retrieve"),
-      max_rows: z.number().int().min(5).max(50).default(15).describe("Max rows to return"),
+      title: "Get Statistics Canada Data",
+      description:
+        "Use this when the user asks for specific Canadian statistics or data. Retrieves and displays data tables from Statistics Canada for topics like population, labour force, CPI/inflation, housing starts, GDP, or trade.",
+      inputSchema: {
+        topic: z
+          .enum(["population", "labour", "cpi", "housing", "gdp", "trade", "crime", "education"])
+          .describe("The statistical topic to retrieve"),
+        max_rows: z
+          .number()
+          .int()
+          .min(5)
+          .max(50)
+          .default(15)
+          .describe("Max rows to return"),
+      },
+      _meta: { "openai/outputTemplate": WIDGET_URI },
     },
     async ({ topic, max_rows = 15 }) => {
       const catalogue = TABLE_CATALOGUE[topic];
-      if (!catalogue) return { content: [{ type: "text", text: `Unknown topic: ${topic}` }], structuredContent: { rows: [], columns: [], title: "Error", source: "" } };
+      if (!catalogue) {
+        return {
+          content: [{ type: "text", text: `Unknown topic: ${topic}` }],
+          structuredContent: { rows: [], columns: [], title: "Error", source: "" },
+        };
+      }
 
       let structuredContent;
       try {
@@ -217,11 +280,24 @@ function createStatCanServer() {
     }
   );
 
-  server.tool(
+  // ---- Tool: search_statcan ----
+  server.registerTool(
     "search_statcan",
-{ description: "Use this when the user provides a specific Statistics Canada table ID (e.g. 17-10-0005-01) and wants to retrieve its data directly.", _meta: { "openai/outputTemplate": WIDGET_URI } },    {
-      table_id: z.string().describe("Statistics Canada table ID, e.g. 17-10-0005-01"),
-      max_rows: z.number().int().min(5).max(50).default(20).describe("Max rows to return"),
+    {
+      title: "Search Statistics Canada by Table ID",
+      description:
+        "Use this when the user provides a specific Statistics Canada table ID (e.g. 17-10-0005-01) and wants to retrieve its data directly.",
+      inputSchema: {
+        table_id: z.string().describe("Statistics Canada table ID, e.g. 17-10-0005-01"),
+        max_rows: z
+          .number()
+          .int()
+          .min(5)
+          .max(50)
+          .default(20)
+          .describe("Max rows to return"),
+      },
+      _meta: { "openai/outputTemplate": WIDGET_URI },
     },
     async ({ table_id, max_rows = 20 }) => {
       let structuredContent = null;
@@ -233,24 +309,37 @@ function createStatCanServer() {
       }
 
       if (!structuredContent) {
-        return { content: [{ type: "text", text: `Could not retrieve table ${table_id}.` }], structuredContent: { rows: [], columns: [], title: `Table ${table_id}`, source: "Statistics Canada" } };
+        return {
+          content: [{ type: "text", text: `Could not retrieve table ${table_id}.` }],
+          structuredContent: { rows: [], columns: [], title: `Table ${table_id}`, source: "Statistics Canada" },
+        };
       }
 
       structuredContent.title = `Statistics Canada Table ${table_id}`;
-      return { content: [{ type: "text", text: `Loaded ${structuredContent.rows.length} rows from table ${table_id}.` }], structuredContent };
+      return {
+        content: [{ type: "text", text: `Loaded ${structuredContent.rows.length} rows from table ${table_id}.` }],
+        structuredContent,
+      };
     }
   );
 
   return server;
 }
 
+// ---------------------------------------------------------------------------
+// HTTP server
+// ---------------------------------------------------------------------------
 const PORT = Number(process.env.PORT ?? 8787);
 const MCP_PATH = "/mcp";
 
 const httpServer = createServer(async (req, res) => {
-  if (!req.url) { res.writeHead(400).end("Missing URL"); return; }
+  if (!req.url) {
+    res.writeHead(400).end("Missing URL");
+    return;
+  }
   const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
 
+  // ---- CORS preflight ----
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
@@ -262,18 +351,29 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
+  // ---- Health check ----
   if (req.method === "GET" && url.pathname === "/") {
     res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ status: "ok" }));
     return;
   }
 
+  // ---- MCP endpoint ----
   const MCP_METHODS = new Set(["POST", "GET", "DELETE"]);
   if (url.pathname === MCP_PATH && req.method && MCP_METHODS.has(req.method)) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
+
     const server = createStatCanServer();
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    res.on("close", () => { transport.close(); server.close(); });
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+
+    res.on("close", () => {
+      transport.close();
+      server.close();
+    });
+
     try {
       await server.connect(transport);
       await transport.handleRequest(req, res);

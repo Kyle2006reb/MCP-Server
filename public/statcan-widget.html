@@ -231,28 +231,32 @@
 
         const { title, source, columns, rows, notes } = data;
 
-        const headerCells = columns.map(col =>
-          `<th class="${col.numeric ? 'num' : ''}">${col.label}</th>`
-        ).join("");
+        const headerCells = columns
+          .map((col) => `<th class="${col.numeric ? "num" : ""}">${col.label}</th>`)
+          .join("");
 
-        const bodyRows = rows.map(row => {
-          const cells = columns.map(col => {
-            const val = row[col.key];
-            if (col.numeric) {
-              return `<td class="num">${formatNumber(val)}</td>`;
-            }
-            if (col.change && val !== null && val !== undefined) {
-              const n = Number(val);
-              if (!isNaN(n)) {
-                const cls = n >= 0 ? "badge-pos" : "badge-neg";
-                const sign = n >= 0 ? "+" : "";
-                return `<td><span class="badge ${cls}">${sign}${val}%</span></td>`;
-              }
-            }
-            return `<td>${val ?? "N/A"}</td>`;
-          }).join("");
-          return `<tr>${cells}</tr>`;
-        }).join("");
+        const bodyRows = rows
+          .map((row) => {
+            const cells = columns
+              .map((col) => {
+                const val = row[col.key];
+                if (col.numeric) {
+                  return `<td class="num">${formatNumber(val)}</td>`;
+                }
+                if (col.change && val !== null && val !== undefined) {
+                  const n = Number(val);
+                  if (!isNaN(n)) {
+                    const cls = n >= 0 ? "badge-pos" : "badge-neg";
+                    const sign = n >= 0 ? "+" : "";
+                    return `<td><span class="badge ${cls}">${sign}${val}%</span></td>`;
+                  }
+                }
+                return `<td>${val ?? "N/A"}</td>`;
+              })
+              .join("");
+            return `<tr>${cells}</tr>`;
+          })
+          .join("");
 
         const rowCount = rows.length;
         const year = notes?.reference_period ?? "";
@@ -283,7 +287,7 @@
 
           <p class="source-note">
             Source: <a href="https://www150.statcan.gc.ca" target="_blank" rel="noopener">Statistics Canada</a>
-            ${notes?.table_id ? ` &mdash; Table ${notes.table_id}` : ""}
+            ${notes?.table_id ? ` | Table ${notes.table_id}` : ""}
           </p>
         `;
       }
@@ -297,12 +301,16 @@
       render(getData());
 
       // Listen for Athena updates
-      window.addEventListener("openai:set_globals", (event) => {
-        const globals = event.detail?.globals;
-        if (globals?.toolOutput) {
-          render(globals.toolOutput);
-        }
-      }, { passive: true });
+      window.addEventListener(
+        "openai:set_globals",
+        (event) => {
+          const globals = event.detail?.globals;
+          if (globals?.toolOutput) {
+            render(globals.toolOutput);
+          }
+        },
+        { passive: true }
+      );
     </script>
   </body>
 </html>
